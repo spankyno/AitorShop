@@ -35,6 +35,8 @@ jobs:
         if [ ! -f .env ]; then
           cp .env.example .env
         fi
+        # Modify gradle.properties to use daemon strategy on CI to avoid KSP in-process NullPointerException
+        sed -i 's/kotlin.compiler.execution.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
 
     - name: Build Debug APK
       run: gradle assembleDebug --no-daemon
