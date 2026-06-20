@@ -30,32 +30,32 @@ jobs:
         sdkmanager "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || \
         sdkmanager "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 || true
  
-    - name: Generate Gradle Wrapper
+    - name: Prepare project for CI
       run: |
-        # ── IMPORTANTE: los archivos .env deben existir ANTES de invocar Gradle,
-        # porque `gradle wrapper` configura todos los proyectos (:app incluido)
-        # y el plugin Secrets falla en esa fase si no los encuentra.
+        GRADLE_VERSION="8.11.1"
+ 
+        # 1. Crear archivos .env ANTES de cualquier invocación de Gradle
+        #    El plugin Secrets los busca en la raíz del proyecto durante
+        #    la fase de configuración, independientemente del módulo.
         ENV_CONTENT="GEMINI_API_KEY=dummy_ci_key
         SUPABASE_URL=https://dummy.supabase.co
         SUPABASE_KEY=dummy_ci_key"
-        # Raíz del proyecto (donde el plugin busca en fase de configuración)
         echo "$ENV_CONTENT" > .env.example
         echo "$ENV_CONTENT" > .env
-        # Directorio del módulo app/ (donde el plugin lee en fase de build)
         echo "$ENV_CONTENT" > app/.env.example
         echo "$ENV_CONTENT" > app/.env
-        echo "✓ Archivos .env creados:"
-        ls -la .env .env.example app/.env app/.env.example
+        echo "Archivos .env creados en raiz y app/"
  
-        # Ajustes en gradle.properties para CI
+        # 2. Ajustar gradle.properties para CI
         sed -i 's/kotlin\.compiler\.execution\.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
         echo "systemProp.java.awt.headless=true" >> gradle.properties
         sed -i 's/org\.gradle\.configuration-cache=true/org.gradle.configuration-cache=false/g' gradle.properties
  
-        # Eliminar local.properties con rutas SDK locales
+        # 3. Eliminar local.properties y configuration cache previo
         rm -f local.properties app/local.properties
+        rm -rf .gradle/configuration-cache
  
-        # Generar debug.keystore si no existe en el repo
+        # 4. Generar debug.keystore
         if [ ! -f debug.keystore ]; then
           keytool -genkeypair \
             -keystore debug.keystore \
@@ -71,19 +71,33 @@ jobs:
           base64 --decode debug.keystore.base64 > debug.keystore
         fi
  
-        # Ahora sí: descargar Gradle y generar el wrapper
-        GRADLE_VERSION="8.11.1"
-        wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
-        unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
-        export GRADLE_HOME="/tmp/gradle-dist/gradle-${GRADLE_VERSION}"
-        export PATH="${GRADLE_HOME}/bin:${PATH}"
-        gradle wrapper --gradle-version="${GRADLE_VERSION}"
+        # 5. Crear el Gradle Wrapper manualmente SIN invocar `gradle wrapper`
+        #    (evita que Gradle configure :app antes de que existan los .env)
+        mkdir -p gradle/wrapper
+        cat > gradle/wrapper/gradle-wrapper.properties << EOF
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
+        networkTimeout=10000
+        validateDistributionUrl=true
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+ 
+        # Descargar gradlew y gradlew.bat oficiales desde el repo de Gradle
+        wget -q "https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradlew" -O gradlew
+        wget -q "https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradlew.bat" -O gradlew.bat
         chmod +x gradlew
+ 
+        # Descargar el gradle-wrapper.jar oficial
+        wget -q "https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradle/wrapper/gradle-wrapper.jar" \
+          -O gradle/wrapper/gradle-wrapper.jar
+ 
+        echo "Gradle wrapper creado:"
+        ls -la gradlew gradle/wrapper/
  
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: wrapper
  
     - name: Build Debug APK
       env:
