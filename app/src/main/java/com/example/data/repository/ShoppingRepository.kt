@@ -150,13 +150,17 @@ class ShoppingRepository(
         val key = SupabaseClient.getApiKey()
         if (key.isBlank()) return@withContext false
 
+        val sharedPrefs = context.getSharedPreferences("supercompra_prefs", Context.MODE_PRIVATE)
+        val userToken = sharedPrefs.getString("user_token", null)
+        val bearerToken = if (!userToken.isNullOrEmpty()) "Bearer $userToken" else "Bearer $key"
+
         try {
             // 1. Fetch current remote state of items for this list (excluding deleted)
             val remoteItems = api.getItems(
                 listIdFilter = "eq.$listId",
                 deletedFilter = "eq.false",
                 apiKey = key,
-                bearer = "Bearer $key"
+                bearer = bearerToken
             )
 
             // 2. Fetch local active items & raw items (for status comparison)
@@ -247,7 +251,7 @@ class ShoppingRepository(
                 val response = api.upsertItems(
                     items = dtoList,
                     apiKey = key,
-                    bearer = "Bearer $key"
+                    bearer = bearerToken
                 )
 
                 if (response.isSuccessful) {
