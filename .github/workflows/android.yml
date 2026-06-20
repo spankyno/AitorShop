@@ -1,5 +1,5 @@
 name: Build Android APK
-  
+ 
 on:
   push:
     branches: [ "main", "master" ]
@@ -36,8 +36,8 @@ jobs:
         # porque `gradle wrapper` configura todos los proyectos (:app incluido)
         # y el plugin Secrets falla en esa fase si no los encuentra.
         ENV_CONTENT="GEMINI_API_KEY=dummy_ci_key
-SUPABASE_URL=https://dummy.supabase.co
-SUPABASE_KEY=dummy_ci_key"
+        SUPABASE_URL=https://dummy.supabase.co
+        SUPABASE_KEY=dummy_ci_key"
         # Raíz del proyecto (donde el plugin busca en fase de configuración)
         echo "$ENV_CONTENT" > .env.example
         echo "$ENV_CONTENT" > .env
