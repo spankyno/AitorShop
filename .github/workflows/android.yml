@@ -43,13 +43,10 @@ jobs:
         # Enable Headless AWT mode on Gradle to avoid KSP NullPointerException
         echo "systemProp.java.awt.headless=true" >> gradle.properties
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-
     - name: Build Debug APK
       env:
         _JAVA_OPTIONS: "-Djava.awt.headless=true"
-      run: ./gradlew assembleDebug --no-daemon --stacktrace
+      run: gradle assembleDebug --no-daemon --stacktrace
 
     - name: Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
