@@ -203,6 +203,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // Initial Sync
             forceSync()
         }
+        viewModelScope.launch {
+            // Periodic background sync loop every 10 seconds to sync list changes continuously across devices
+            while (true) {
+                kotlinx.coroutines.delay(10000)
+                if (isSupabaseConfigured) {
+                    repository.triggerSync(_activeListId.value)
+                }
+            }
+        }
     }
 
     // --- Actions ---
