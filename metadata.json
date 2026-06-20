@@ -1,0 +1,6 @@
+{
+  "name": "AitorShop",
+  "description": "Aplicación inteligente para la lista de la compra con sincronización Supabase en tiempo real, modo offline, entrada por voz, control de gastos y modo de compra.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
