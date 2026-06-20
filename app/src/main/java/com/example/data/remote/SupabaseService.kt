@@ -60,6 +60,7 @@ interface SupabaseApi {
 }
 
 object SupabaseClient {
+
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
@@ -73,9 +74,9 @@ object SupabaseClient {
         .build()
 
     // Dynamically retrieve URL to prevent crash with invalid URLs during fallback
-    fun getApi(customUrl: String? = null): SupabaseApi? {
-        val baseUrl = customUrl ?: BuildConfig.SUPABASE_URL
-        if (baseUrl.isBlank() || baseUrl.contains("your-project") || !baseUrl.startsWith("http")) {
+    fun getApi(): SupabaseApi? {
+        val baseUrl = BuildConfig.SUPABASE_URL
+        if (baseUrl.isBlank() || baseUrl.contains("your-project") || baseUrl.contains("dummy") || !baseUrl.startsWith("http")) {
             return null
         }
         val formattedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
@@ -91,9 +92,9 @@ object SupabaseClient {
         }
     }
 
-    fun getAuthApi(customUrl: String? = null): SupabaseAuthApi? {
-        val baseUrl = customUrl ?: BuildConfig.SUPABASE_URL
-        if (baseUrl.isBlank() || baseUrl.contains("your-project") || !baseUrl.startsWith("http")) {
+    fun getAuthApi(): SupabaseAuthApi? {
+        val baseUrl = BuildConfig.SUPABASE_URL
+        if (baseUrl.isBlank() || baseUrl.contains("your-project") || baseUrl.contains("dummy") || !baseUrl.startsWith("http")) {
             return null
         }
         val formattedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
@@ -111,7 +112,7 @@ object SupabaseClient {
 
     fun getApiKey(): String {
         val key = BuildConfig.SUPABASE_KEY
-        if (key.isBlank() || key.contains("your-supabase")) {
+        if (key.isBlank() || key.contains("your-supabase") || key.contains("dummy")) {
             return ""
         }
         return key
