@@ -195,26 +195,28 @@ class ShoppingRepository(
                     remoteModificationsFound = true
                     remoteModificationsLogs.add("Añadido '${remote.name}' por otro usuario")
                 } else {
-                    // Check if is changed on Supabase
-                    val isCheckedDifferent = local.isPurchased != remote.isPurchased
-                    val isDataDifferent = local.name != remote.name || local.quantity != remote.quantity || local.price != remote.price
+                    // Only apply remote changes if our local record is synced (no pending local changes)
+                    if (local.isSynced) {
+                        val isCheckedDifferent = local.isPurchased != remote.isPurchased
+                        val isDataDifferent = local.name != remote.name || local.quantity != remote.quantity || local.price != remote.price
 
-                    if (isCheckedDifferent || isDataDifferent) {
-                        shoppingItemDao.insert(
-                            local.copy(
-                                name = remote.name,
-                                quantity = remote.quantity,
-                                unit = remote.unit,
-                                price = remote.price,
-                                category = remote.category,
-                                isPurchased = remote.isPurchased,
-                                isSynced = true,
-                                isDeleted = false
+                        if (isCheckedDifferent || isDataDifferent) {
+                            shoppingItemDao.insert(
+                                local.copy(
+                                    name = remote.name,
+                                    quantity = remote.quantity,
+                                    unit = remote.unit,
+                                    price = remote.price,
+                                    category = remote.category,
+                                    isPurchased = remote.isPurchased,
+                                    isSynced = true,
+                                    isDeleted = false
+                                )
                             )
-                        )
-                        remoteModificationsFound = true
-                        val statusString = if (remote.isPurchased) "marcado" else "desmarcado"
-                        remoteModificationsLogs.add("Modificado '${remote.name}' ($statusString) por otro usuario")
+                            remoteModificationsFound = true
+                            val statusString = if (remote.isPurchased) "marcado" else "desmarcado"
+                            remoteModificationsLogs.add("Modificado '${remote.name}' ($statusString) por otro usuario")
+                        }
                     }
                 }
             }
