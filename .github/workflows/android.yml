@@ -32,43 +32,24 @@ jobs:
  
     - name: Generate Gradle Wrapper
       run: |
-        GRADLE_VERSION="8.11.1"
-        wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
-        unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
-        export GRADLE_HOME="/tmp/gradle-dist/gradle-${GRADLE_VERSION}"
-        export PATH="${GRADLE_HOME}/bin:${PATH}"
-        gradle wrapper --gradle-version="${GRADLE_VERSION}"
-        chmod +x gradlew
- 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: wrapper
- 
-    - name: Prepare environment files and properties
-      run: |
-        # El plugin Secrets de Google busca el defaultPropertiesFileName
-        # en la raíz del proyecto durante la fase de configuración de Gradle,
-        # independientemente del módulo donde esté declarado.
-        # Creamos los archivos en la raíz Y en app/ para cubrir ambos casos.
-        ENV_CONTENT=$(printf 'GEMINI_API_KEY=dummy_ci_key\nSUPABASE_URL=https://dummy.supabase.co\nSUPABASE_KEY=dummy_ci_key\n')
- 
+        # ── IMPORTANTE: los archivos .env deben existir ANTES de invocar Gradle,
+        # porque `gradle wrapper` configura todos los proyectos (:app incluido)
+        # y el plugin Secrets falla en esa fase si no los encuentra.
+        ENV_CONTENT="GEMINI_API_KEY=dummy_ci_key
+SUPABASE_URL=https://dummy.supabase.co
+SUPABASE_KEY=dummy_ci_key"
+        # Raíz del proyecto (donde el plugin busca en fase de configuración)
         echo "$ENV_CONTENT" > .env.example
         echo "$ENV_CONTENT" > .env
+        # Directorio del módulo app/ (donde el plugin lee en fase de build)
         echo "$ENV_CONTENT" > app/.env.example
         echo "$ENV_CONTENT" > app/.env
- 
-        # Verificar que se crearon correctamente
-        echo "--- Archivos .env creados ---"
+        echo "✓ Archivos .env creados:"
         ls -la .env .env.example app/.env app/.env.example
  
-        # Cambiar estrategia del compilador Kotlin a daemon en CI
+        # Ajustes en gradle.properties para CI
         sed -i 's/kotlin\.compiler\.execution\.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
- 
-        # Forzar modo headless de AWT (evita NPE en KSP/Compose compiler)
         echo "systemProp.java.awt.headless=true" >> gradle.properties
- 
-        # Desactivar configuration cache en CI
         sed -i 's/org\.gradle\.configuration-cache=true/org.gradle.configuration-cache=false/g' gradle.properties
  
         # Eliminar local.properties con rutas SDK locales
@@ -82,17 +63,27 @@ jobs:
             -keypass android \
             -storepass android \
             -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
+            -keyalg RSA -keysize 2048 -validity 10000 \
             -deststoretype pkcs12
         fi
- 
-        # Decodificar keystore desde base64 si existe
         if [ -f debug.keystore.base64 ]; then
           base64 -d debug.keystore.base64 > debug.keystore || \
           base64 --decode debug.keystore.base64 > debug.keystore
         fi
+ 
+        # Ahora sí: descargar Gradle y generar el wrapper
+        GRADLE_VERSION="8.11.1"
+        wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
+        unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
+        export GRADLE_HOME="/tmp/gradle-dist/gradle-${GRADLE_VERSION}"
+        export PATH="${GRADLE_HOME}/bin:${PATH}"
+        gradle wrapper --gradle-version="${GRADLE_VERSION}"
+        chmod +x gradlew
+ 
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: wrapper
  
     - name: Build Debug APK
       env:
