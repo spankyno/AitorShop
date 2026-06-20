@@ -43,10 +43,19 @@ jobs:
         # Enable Headless AWT mode on Gradle to avoid KSP NullPointerException
         echo "systemProp.java.awt.headless=true" >> gradle.properties
 
+        # Delete local.properties to prevent stale/incorrect SDK paths committed in the Git project
+        rm -f local.properties
+        rm -f app/local.properties
+
+        # Recreate the debug keystore for signing validation from base64
+        if [ -f debug.keystore.base64 ]; then
+          base64 -d debug.keystore.base64 > debug.keystore || base64 --decode debug.keystore.base64 > debug.keystore
+        fi
+
     - name: Build Debug APK
       env:
         _JAVA_OPTIONS: "-Djava.awt.headless=true"
-      run: gradle assembleDebug --no-daemon --stacktrace
+      run: gradle assembleDebug --stacktrace
 
     - name: Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
