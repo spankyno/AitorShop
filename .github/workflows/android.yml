@@ -52,15 +52,15 @@ jobs:
  
     - name: Prepare environment files and properties
       run: |
-        # Crear .env.example si no existe (requerido por el plugin Secrets)
-        if [ ! -f .env.example ]; then
-          echo "GEMINI_API_KEY=dummy_ci_key" > .env.example
-          echo "SUPABASE_URL=https://dummy.supabase.co" >> .env.example
-          echo "SUPABASE_KEY=dummy_ci_key" >> .env.example
+        # El plugin Secrets resuelve los paths relativos al directorio del módulo (app/)
+        # Por tanto .env y .env.example deben estar en app/, NO en la raíz del proyecto
+        if [ ! -f app/.env.example ]; then
+          echo "GEMINI_API_KEY=dummy_ci_key" > app/.env.example
+          echo "SUPABASE_URL=https://dummy.supabase.co" >> app/.env.example
+          echo "SUPABASE_KEY=dummy_ci_key" >> app/.env.example
         fi
-        # Crear .env a partir del ejemplo si no existe
-        if [ ! -f .env ]; then
-          cp .env.example .env
+        if [ ! -f app/.env ]; then
+          cp app/.env.example app/.env
         fi
  
         # En CI: cambiar estrategia del compilador Kotlin a daemon
