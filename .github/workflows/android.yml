@@ -49,11 +49,11 @@ jobs:
         ENV_CONTENT="GEMINI_API_KEY=$GEMINI_API_KEY_VAL
         SUPABASE_URL=$SUPABASE_URL_VAL
         SUPABASE_KEY=$SUPABASE_KEY_VAL"
-        echo "$ENV_CONTENT" > .env.example
-        echo "$ENV_CONTENT" > .env
-        echo "$ENV_CONTENT" > app/.env.example
-        echo "$ENV_CONTENT" > app/.env
-        echo "Archivos .env creados en raiz y app/ utilizando secretos reales de GitHub"
+                echo "$ENV_CONTENT" > .env.example
+                echo "$ENV_CONTENT" > .env
+                echo "$ENV_CONTENT" > app/.env.example
+                echo "$ENV_CONTENT" > app/.env
+                echo "Archivos .env creados en raiz y app/ utilizando secretos reales de GitHub"
 
         # 2. Ajustar gradle.properties para CI
         sed -i 's/kotlin\.compiler\.execution\.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
@@ -120,3 +120,4 @@ jobs:
         name: AitorShop-Debug-APK
         path: app/build/outputs/apk/debug/app-debug.apk
         if-no-files-found: error
+         
