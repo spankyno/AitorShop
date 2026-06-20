@@ -20,23 +20,18 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '17'
-        # No usar cache: 'gradle' aquí porque no existe el wrapper en el repo
-        # Se activa con setup-gradle más abajo
  
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
  
     - name: Install Android SDK platform (API 36)
       run: |
-        # Aceptar licencias y descargar el SDK platform necesario
         yes | sdkmanager --licenses > /dev/null 2>&1 || true
         sdkmanager "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || \
         sdkmanager "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 || true
  
     - name: Generate Gradle Wrapper
-      # El proyecto no incluye el wrapper; lo generamos con Gradle instalado globalmente
       run: |
-        # Instalar Gradle 8.x compatible con AGP 9.x
         GRADLE_VERSION="8.11.1"
         wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
         unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
@@ -52,32 +47,34 @@ jobs:
  
     - name: Prepare environment files and properties
       run: |
-        # El plugin Secrets resuelve los paths relativos al directorio del módulo (app/)
-        # Por tanto .env y .env.example deben estar en app/, NO en la raíz del proyecto
-        if [ ! -f app/.env.example ]; then
-          echo "GEMINI_API_KEY=dummy_ci_key" > app/.env.example
-          echo "SUPABASE_URL=https://dummy.supabase.co" >> app/.env.example
-          echo "SUPABASE_KEY=dummy_ci_key" >> app/.env.example
-        fi
-        if [ ! -f app/.env ]; then
-          cp app/.env.example app/.env
-        fi
+        # El plugin Secrets de Google busca el defaultPropertiesFileName
+        # en la raíz del proyecto durante la fase de configuración de Gradle,
+        # independientemente del módulo donde esté declarado.
+        # Creamos los archivos en la raíz Y en app/ para cubrir ambos casos.
+        ENV_CONTENT=$(printf 'GEMINI_API_KEY=dummy_ci_key\nSUPABASE_URL=https://dummy.supabase.co\nSUPABASE_KEY=dummy_ci_key\n')
  
-        # En CI: cambiar estrategia del compilador Kotlin a daemon
-        # para evitar el NullPointerException de KSP in-process
+        echo "$ENV_CONTENT" > .env.example
+        echo "$ENV_CONTENT" > .env
+        echo "$ENV_CONTENT" > app/.env.example
+        echo "$ENV_CONTENT" > app/.env
+ 
+        # Verificar que se crearon correctamente
+        echo "--- Archivos .env creados ---"
+        ls -la .env .env.example app/.env app/.env.example
+ 
+        # Cambiar estrategia del compilador Kotlin a daemon en CI
         sed -i 's/kotlin\.compiler\.execution\.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
  
-        # Forzar modo headless de AWT para evitar NPE en KSP/Compose compiler
+        # Forzar modo headless de AWT (evita NPE en KSP/Compose compiler)
         echo "systemProp.java.awt.headless=true" >> gradle.properties
  
-        # Desactivar configuration cache en CI (incompatible con algunos plugins)
+        # Desactivar configuration cache en CI
         sed -i 's/org\.gradle\.configuration-cache=true/org.gradle.configuration-cache=false/g' gradle.properties
  
-        # Eliminar local.properties con rutas locales del SDK que romperían el build
-        rm -f local.properties
-        rm -f app/local.properties
+        # Eliminar local.properties con rutas SDK locales
+        rm -f local.properties app/local.properties
  
-        # Generar debug.keystore estándar de Android si no existe en el repo
+        # Generar debug.keystore si no existe en el repo
         if [ ! -f debug.keystore ]; then
           keytool -genkeypair \
             -keystore debug.keystore \
@@ -91,7 +88,7 @@ jobs:
             -deststoretype pkcs12
         fi
  
-        # Decodificar keystore desde base64 si existe (sobrescribe el generado arriba)
+        # Decodificar keystore desde base64 si existe
         if [ -f debug.keystore.base64 ]; then
           base64 -d debug.keystore.base64 > debug.keystore || \
           base64 --decode debug.keystore.base64 > debug.keystore
