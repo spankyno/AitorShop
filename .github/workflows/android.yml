@@ -1,62 +1,108 @@
 name: Build Android APK
-
+ 
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-
+ 
 jobs:
   build:
     name: Compile and Build APK
     runs-on: ubuntu-latest
-
+ 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-
+ 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-        cache: 'gradle'
-
+        # No usar cache: 'gradle' aquí porque no existe el wrapper en el repo
+        # Se activa con setup-gradle más abajo
+ 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-
-    - name: Create fallback env files
+ 
+    - name: Install Android SDK platform (API 36)
       run: |
+        # Aceptar licencias y descargar el SDK platform necesario
+        yes | sdkmanager --licenses > /dev/null 2>&1 || true
+        sdkmanager "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 || \
+        sdkmanager "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 || true
+ 
+    - name: Generate Gradle Wrapper
+      # El proyecto no incluye el wrapper; lo generamos con Gradle instalado globalmente
+      run: |
+        # Instalar Gradle 8.x compatible con AGP 9.x
+        GRADLE_VERSION="8.11.1"
+        wget -q "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -O /tmp/gradle.zip
+        unzip -q /tmp/gradle.zip -d /tmp/gradle-dist
+        export GRADLE_HOME="/tmp/gradle-dist/gradle-${GRADLE_VERSION}"
+        export PATH="${GRADLE_HOME}/bin:${PATH}"
+        gradle wrapper --gradle-version="${GRADLE_VERSION}"
+        chmod +x gradlew
+ 
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: wrapper
+ 
+    - name: Prepare environment files and properties
+      run: |
+        # Crear .env.example si no existe (requerido por el plugin Secrets)
         if [ ! -f .env.example ]; then
           echo "GEMINI_API_KEY=dummy_ci_key" > .env.example
           echo "SUPABASE_URL=https://dummy.supabase.co" >> .env.example
           echo "SUPABASE_KEY=dummy_ci_key" >> .env.example
         fi
+        # Crear .env a partir del ejemplo si no existe
         if [ ! -f .env ]; then
           cp .env.example .env
         fi
-        # Modify gradle.properties to use daemon strategy on CI to avoid KSP in-process NullPointerException
-        sed -i 's/kotlin.compiler.execution.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
-        # Enable Headless AWT mode on Gradle to avoid KSP NullPointerException
+ 
+        # En CI: cambiar estrategia del compilador Kotlin a daemon
+        # para evitar el NullPointerException de KSP in-process
+        sed -i 's/kotlin\.compiler\.execution\.strategy=in-process/kotlin.compiler.execution.strategy=daemon/g' gradle.properties
+ 
+        # Forzar modo headless de AWT para evitar NPE en KSP/Compose compiler
         echo "systemProp.java.awt.headless=true" >> gradle.properties
-
-        # Delete local.properties to prevent stale/incorrect SDK paths committed in the Git project
+ 
+        # Desactivar configuration cache en CI (incompatible con algunos plugins)
+        sed -i 's/org\.gradle\.configuration-cache=true/org.gradle.configuration-cache=false/g' gradle.properties
+ 
+        # Eliminar local.properties con rutas locales del SDK que romperían el build
         rm -f local.properties
         rm -f app/local.properties
-
-        # Recreate the debug keystore for signing validation from base64
-        if [ -f debug.keystore.base64 ]; then
-          base64 -d debug.keystore.base64 > debug.keystore || base64 --decode debug.keystore.base64 > debug.keystore
+ 
+        # Generar debug.keystore estándar de Android si no existe en el repo
+        if [ ! -f debug.keystore ]; then
+          keytool -genkeypair \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
+            -keypass android \
+            -storepass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -deststoretype pkcs12
         fi
-
+ 
+        # Decodificar keystore desde base64 si existe (sobrescribe el generado arriba)
+        if [ -f debug.keystore.base64 ]; then
+          base64 -d debug.keystore.base64 > debug.keystore || \
+          base64 --decode debug.keystore.base64 > debug.keystore
+        fi
+ 
     - name: Build Debug APK
       env:
         _JAVA_OPTIONS: "-Djava.awt.headless=true"
-      run: gradle assembleDebug --stacktrace
-
+        ANDROID_HOME: ${{ env.ANDROID_HOME }}
+      run: ./gradlew assembleDebug --stacktrace --no-daemon
+ 
     - name: Upload Debug APK Artifact
       uses: actions/upload-artifact@v4
       with:
