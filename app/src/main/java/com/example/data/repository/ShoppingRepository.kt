@@ -404,7 +404,6 @@ class TokenAuthenticator(
             .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-            .certificatePinner(SupabaseClient.certificatePinner)
             .build()
         val jsonPayload = "{\"refresh_token\":\"$refreshToken\"}"
         val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
