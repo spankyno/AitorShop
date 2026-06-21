@@ -71,25 +71,6 @@ object SupabaseClient {
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    val certificatePinner: okhttp3.CertificatePinner by lazy {
-        val pinnerBuilder = okhttp3.CertificatePinner.Builder()
-        val baseUrl = BuildConfig.SUPABASE_URL
-        val host = try {
-            java.net.URI(baseUrl).host
-        } catch (e: Exception) {
-            null
-        }
-        if (!host.isNullOrBlank()) {
-            pinnerBuilder.add(host, 
-                "sha256/C5+OTGccW7S80i7Y84vYAr0YTuWFTm86rmTBUO13nWI=", // ISRG Root X1
-                "sha256/di9Y8Z989vsuX9sb86WbkW9b80vYi1mBUO13nWI=", // ISRG Root X2
-                "sha256/jQ3ytSECIdCmwc7IJ636v8gN6POOf6A3FvM2m8nygAM=", // Let's Encrypt R3
-                "sha256/k2v657xBsOVe1P9XXHsmbniP9pdjVIMp096j94bBEXS="  // Let's Encrypt E1
-            )
-        }
-        pinnerBuilder.build()
-    }
-
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
     }
@@ -98,7 +79,6 @@ object SupabaseClient {
         .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-        .certificatePinner(certificatePinner)
         .addInterceptor(loggingInterceptor)
         .authenticator { route, response ->
             customAuthenticator?.authenticate(route, response)
