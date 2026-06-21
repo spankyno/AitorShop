@@ -1,7 +1,6 @@
 package com.example.ui
 
 import android.app.Application
-import android.content.Context
 import android.speech.RecognizerIntent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -10,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.local.*
 import com.example.data.remote.SupabaseClient
 import com.example.data.repository.ShoppingRepository
+import com.example.security.SecureSessionManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -23,23 +23,55 @@ data class VoiceParsedItem(
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val sharedPrefs = application.getSharedPreferences("supercompra_prefs", Context.MODE_PRIVATE)
+    // ---- Sesión segura (token JWT cifrado en Android Keystore) ----
+    private val session = SecureSessionManager(application)
+
+    private val encryptedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            SecureSessionManager.KEY_TOKEN -> {
+                _userToken.value = session.accessToken
+            }
+            SecureSessionManager.KEY_EMAIL -> {
+                _userEmail.value = session.userEmail
+            }
+        }
+    }
+
+    private val plainPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            SecureSessionManager.KEY_LOGGED_IN -> {
+                _isUserLoggedIn.value = session.isLoggedIn
+            }
+            SecureSessionManager.KEY_GUEST -> {
+                _isGuestMode.value = session.isGuestMode
+            }
+            SecureSessionManager.KEY_ACTIVE_LIST -> {
+                _activeListId.value = session.activeListId
+            }
+            SecureSessionManager.KEY_DARK_MODE -> {
+                _isDarkMode.value = session.isDarkMode
+            }
+        }
+    }
+
+    private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
 
     // Database & Repository initialization
     private val database = AppDatabase.getDatabase(application)
     private val repository = ShoppingRepository(
         application,
+        session,
         database.shoppingItemDao(),
         database.predefinedItemDao(),
         database.purchaseHistoryDao()
     )
 
-    // Active shared list ID (persisted locally)
-    private val _activeListId = MutableStateFlow(sharedPrefs.getString("active_list_id", "CASA_FAMILIA") ?: "CASA_FAMILIA")
+    // Active shared list ID (persisted locally — dato no sensible)
+    private val _activeListId = MutableStateFlow(session.activeListId)
     val activeListId: StateFlow<String> = _activeListId.asStateFlow()
 
-    // Dark Mode Toggle state (persisted)
-    private val _isDarkMode = MutableStateFlow(sharedPrefs.getBoolean("dark_mode", true))
+    // Dark Mode Toggle state (persisted — dato no sensible)
+    private val _isDarkMode = MutableStateFlow(session.isDarkMode)
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
     // Sync state indicators
@@ -52,21 +84,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Realtime shared alerts flow from repository
     val syncAlerts: SharedFlow<String> = repository.syncAlerts
 
-    // --- Authentication State & Functions ---
-    private val _userEmail = MutableStateFlow(sharedPrefs.getString("user_email", null))
+    // --- Authentication State (lee de EncryptedSharedPreferences) ---
+    private val _userEmail = MutableStateFlow(session.userEmail)
     val userEmail: StateFlow<String?> = _userEmail.asStateFlow()
 
-    private val _userToken = MutableStateFlow(sharedPrefs.getString("user_token", null))
+    private val _userToken = MutableStateFlow(session.accessToken)
     val userToken: StateFlow<String?> = _userToken.asStateFlow()
 
-    private val _isUserLoggedIn = MutableStateFlow(sharedPrefs.getBoolean("is_logged_in", false))
+    private val _isUserLoggedIn = MutableStateFlow(session.isLoggedIn)
     val isUserLoggedIn: StateFlow<Boolean> = _isUserLoggedIn.asStateFlow()
 
-    private val _isGuestMode = MutableStateFlow(sharedPrefs.getBoolean("is_guest_mode", false))
+    private val _isGuestMode = MutableStateFlow(session.isGuestMode)
     val isGuestMode: StateFlow<Boolean> = _isGuestMode.asStateFlow()
 
     fun enableGuestMode() {
-        sharedPrefs.edit().putBoolean("is_guest_mode", true).apply()
+        session.setGuestMode(true)
         _isGuestMode.value = true
     }
 
@@ -82,7 +114,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val response = authApi.signUp(com.example.data.remote.AuthRequest(email, password), apiKey)
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
-                    saveSession(body.user?.email ?: email, body.accessToken ?: "")
+                    saveSession(body.user?.email ?: email, body.accessToken ?: "", body.refreshToken ?: "")
                     onDone(true, "¡Cuenta creada correctamente!")
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "Error de credenciales/registro"
@@ -106,7 +138,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val response = authApi.signInWithPassword("password", com.example.data.remote.AuthRequest(email, password), apiKey)
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
-                    saveSession(body.user?.email ?: email, body.accessToken ?: "")
+                    saveSession(body.user?.email ?: email, body.accessToken ?: "", body.refreshToken ?: "")
                     onDone(true, "Sesión iniciada correctamente")
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "Error de credenciales"
@@ -130,7 +162,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val response = authApi.signInWithIdToken("id_token", com.example.data.remote.IdTokenAuthRequest("google", idToken), apiKey)
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
-                    saveSession(body.user?.email ?: "usuario_google@gmail.com", body.accessToken ?: "")
+                    saveSession(body.user?.email ?: "usuario_google@gmail.com", body.accessToken ?: "", body.refreshToken ?: "")
                     onDone(true, "Sesión de Google iniciada")
                 } else {
                     val errorBody = response.errorBody()?.string() ?: "Error con ID Token"
@@ -143,12 +175,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        sharedPrefs.edit()
-            .remove("user_email")
-            .remove("user_token")
-            .putBoolean("is_logged_in", false)
-            .putBoolean("is_guest_mode", false)
-            .apply()
+        session.clearSession()           // borra token cifrado + flags
         _userEmail.value = null
         _userToken.value = null
         _isUserLoggedIn.value = false
@@ -156,13 +183,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _lastSyncSuccessful.value = null
     }
 
-    private fun saveSession(email: String, token: String) {
-        sharedPrefs.edit()
-            .putString("user_email", email)
-            .putString("user_token", token)
-            .putBoolean("is_logged_in", true)
-            .putBoolean("is_guest_mode", false)
-            .apply()
+    private fun saveSession(email: String, token: String, refreshToken: String = "") {
+        session.saveSession(email, token, refreshToken)   // cifrado en Keystore
         _userEmail.value = email
         _userToken.value = token
         _isUserLoggedIn.value = true
@@ -199,6 +221,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val voiceParsedResult: SharedFlow<VoiceParsedItem> = _voiceParsedResult
 
     init {
+        session.registerListeners(encryptedPrefsListener, plainPrefsListener)
+
+        val connectivityManager = application.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        if (connectivityManager != null) {
+            val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+                private var wasConnected = true
+
+                override fun onAvailable(network: android.net.Network) {
+                    if (!wasConnected) {
+                        forceSync()
+                    }
+                    wasConnected = true
+                }
+
+                override fun onLost(network: android.net.Network) {
+                    wasConnected = false
+                }
+            }
+            this.networkCallback = callback
+            try {
+                val request = android.net.NetworkRequest.Builder()
+                    .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build()
+                connectivityManager.registerNetworkCallback(request, callback)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         viewModelScope.launch {
             // Seed defaults
             repository.seedPredefinedItemsIfNeeded()
@@ -222,7 +273,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val sanitized = newListId.trim().uppercase(Locale.getDefault())
         if (sanitized.isNotEmpty()) {
             _activeListId.value = sanitized
-            sharedPrefs.edit().putString("active_list_id", sanitized).apply()
+            session.activeListId = sanitized
             viewModelScope.launch {
                 forceSync()
             }
@@ -232,7 +283,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleDarkMode() {
         val next = !_isDarkMode.value
         _isDarkMode.value = next
-        sharedPrefs.edit().putBoolean("dark_mode", next).apply()
+        session.isDarkMode = next
     }
 
     fun forceSync() {
@@ -445,6 +496,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "nueve" -> 9.0
             "diez" -> 10.0
             else -> null
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        session.unregisterListeners(encryptedPrefsListener, plainPrefsListener)
+        val connectivityManager = getApplication<Application>().getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        networkCallback?.let {
+            connectivityManager?.unregisterNetworkCallback(it)
         }
     }
 }

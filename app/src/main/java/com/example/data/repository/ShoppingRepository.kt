@@ -8,6 +8,10 @@ import androidx.core.app.NotificationCompat
 import com.example.data.local.*
 import com.example.data.remote.SupabaseClient
 import com.example.data.remote.SupabaseShoppingItemDto
+import com.example.BuildConfig
+import com.example.security.SecureSessionManager
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,6 +21,7 @@ import java.util.UUID
 
 class ShoppingRepository(
     private val context: Context,
+    private val session: SecureSessionManager,
     private val shoppingItemDao: ShoppingItemDao,
     private val predefinedItemDao: PredefinedItemDao,
     private val purchaseHistoryDao: PurchaseHistoryDao
@@ -27,6 +32,7 @@ class ShoppingRepository(
 
     init {
         createNotificationChannel()
+        SupabaseClient.setAuthenticator(TokenAuthenticator(session))
     }
 
     // --- Core list getters ---
@@ -146,12 +152,12 @@ class ShoppingRepository(
 
     // --- SUPABASE SYNC LOGIC (The core real-time synchronizer) ---
     suspend fun triggerSync(listId: String): Boolean = withContext(Dispatchers.IO) {
+        if (!isNetworkAvailable()) return@withContext false
         val api = SupabaseClient.getApi() ?: return@withContext false
         val key = SupabaseClient.getApiKey()
         if (key.isBlank()) return@withContext false
 
-        val sharedPrefs = context.getSharedPreferences("supercompra_prefs", Context.MODE_PRIVATE)
-        val userToken = sharedPrefs.getString("user_token", null)
+        val userToken = session.accessToken
         val bearerToken = if (!userToken.isNullOrEmpty()) "Bearer $userToken" else "Bearer $key"
 
         try {
@@ -315,8 +321,107 @@ class ShoppingRepository(
         }
     }
 
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            ?: return false
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
     companion object {
         private const val CHANNEL_ID = "supercompra_sync_channel"
         private const val NOTIFICATION_ID = 1001
+    }
+}
+
+class TokenAuthenticator(
+    private val session: SecureSessionManager
+) : okhttp3.Authenticator {
+
+    override fun authenticate(route: okhttp3.Route?, response: okhttp3.Response): okhttp3.Request? {
+        if (response.code != 401) return null
+
+        val urlString = response.request.url.toString()
+        if (urlString.contains("/auth/v1/") || urlString.contains("/token")) {
+            return null
+        }
+
+        synchronized(this) {
+            val currentToken = session.accessToken
+            val requestHeaderToken = response.request.header("Authorization")?.replace("Bearer ", "")
+
+            if (currentToken != null && currentToken != requestHeaderToken) {
+                return response.request.newBuilder()
+                    .header("Authorization", "Bearer $currentToken")
+                    .build()
+            }
+
+            val refreshToken = session.refreshToken
+            if (refreshToken.isNullOrBlank()) {
+                session.clearSession()
+                return null
+            }
+
+            val success = performTokenRefresh(refreshToken)
+            if (success) {
+                val newAccessToken = session.accessToken
+                if (newAccessToken != null) {
+                    return response.request.newBuilder()
+                        .header("Authorization", "Bearer $newAccessToken")
+                        .build()
+                }
+            } else {
+                session.clearSession()
+            }
+        }
+        return null
+    }
+
+    private fun performTokenRefresh(refreshToken: String): Boolean {
+        val apiKey = SupabaseClient.getApiKey()
+        val baseUrl = BuildConfig.SUPABASE_URL
+        if (baseUrl.isBlank() || apiKey.isBlank()) return false
+        val formattedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val tokenUrl = formattedUrl + "auth/v1/token?grant_type=refresh_token"
+
+        val client = okhttp3.OkHttpClient()
+        val jsonPayload = "{\"refresh_token\":\"$refreshToken\"}"
+        val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
+        val body = jsonPayload.toRequestBody(mediaType)
+
+        val request = okhttp3.Request.Builder()
+            .url(tokenUrl)
+            .post(body)
+            .header("apikey", apiKey)
+            .header("Content-Type", "application/json")
+            .build()
+
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful && response.body != null) {
+                    val responseBody = response.body!!.string()
+                    val accessTokenPattern = java.util.regex.Pattern.compile("\"access_token\"\\s*:\\s*\"([^\"]+)\"")
+                    val refreshTokenPattern = java.util.regex.Pattern.compile("\"refresh_token\"\\s*:\\s*\"([^\"]+)\"")
+
+                    val accessMatcher = accessTokenPattern.matcher(responseBody)
+                    val refreshMatcher = refreshTokenPattern.matcher(responseBody)
+
+                    if (accessMatcher.find() && refreshMatcher.find()) {
+                        val newAccess = accessMatcher.group(1) ?: return false
+                        val newRefresh = refreshMatcher.group(1) ?: return false
+                        session.updateTokens(newAccess, newRefresh)
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
     }
 }

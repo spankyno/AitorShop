@@ -61,16 +61,25 @@ interface SupabaseApi {
 
 object SupabaseClient {
 
+    private var customAuthenticator: okhttp3.Authenticator? = null
+
+    fun setAuthenticator(authenticator: okhttp3.Authenticator) {
+        customAuthenticator = authenticator
+    }
+
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
     }
 
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
+        .authenticator { route, response ->
+            customAuthenticator?.authenticate(route, response)
+        }
         .build()
 
     // Dynamically retrieve URL to prevent crash with invalid URLs during fallback
@@ -144,6 +153,11 @@ data class AuthResponse(
     @Json(name = "user") val user: SupabaseUser?
 )
 
+@JsonClass(generateAdapter = true)
+data class RefreshTokenRequest(
+    @Json(name = "refresh_token") val refreshToken: String
+)
+
 interface SupabaseAuthApi {
     @POST("auth/v1/signup")
     suspend fun signUp(
@@ -162,6 +176,13 @@ interface SupabaseAuthApi {
     suspend fun signInWithIdToken(
         @Query("grant_type") grantType: String = "id_token",
         @Body request: IdTokenAuthRequest,
+        @Header("apikey") apiKey: String
+    ): Response<AuthResponse>
+
+    @POST("auth/v1/token")
+    suspend fun refreshToken(
+        @Query("grant_type") grantType: String = "refresh_token",
+        @Body request: RefreshTokenRequest,
         @Header("apikey") apiKey: String
     ): Response<AuthResponse>
 }
