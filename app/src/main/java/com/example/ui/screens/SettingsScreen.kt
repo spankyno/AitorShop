@@ -8,6 +8,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -281,75 +282,15 @@ alter publication supabase_realtime add table shopping_items;
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // --- SECTION 3: TUTORIAL / SUPABASE SETUP INSTRUCTIONS ---
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "Cómo configurar tu base de datos Supabase (¡Gratis!):",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "1. Crea una cuenta gratuita en supabase.com y lanza un nuevo proyecto.\n" +
-                    "2. Ve a la consola SQL y copia el script que se muestra abajo.\n" +
-                    "3. Ve a Project Settings > API en Supabase y obtén tu URL del proyecto y tu clave anon pública.\n" +
-                    "4. En el panel lateral de Google AI Studio, añade 'SUPABASE_URL' y 'SUPABASE_KEY' en la pestaña Secrets y se inyectarán listos para compilar.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    lineHeight = 18.sp
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Script de Creación SQL", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    TextButton(onClick = { copyToClipboard(sqlScript) }) {
-                        Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Copiar SQL", fontSize = 12.sp)
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(12.dp)
-                ) {
-                    SelectionContainer {
-                        Text(
-                            text = sqlScript,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- SECTION 4: GITHUB & APK EXPORT GUIDE ---
+        // --- CHARACTERISTICS ---
         Text(
-            "Exportar y Despliegue APK",
+            "Características de AitorShop",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 4.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
 
         Card(
@@ -357,25 +298,177 @@ alter publication supabase_realtime add table shopping_items;
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("Guía para compilar y subir a Github", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Para guardar tu repositorio y desplegar el APK 100% gratis:\n\n" +
-                    "• **Paso 1: Guardar en GitHub:** En el menú superior o lateral de AI Studio, haz clic en 'Sync to GitHub' o 'Export to GitHub'. Sigue el flujo para conectarte con tu cuenta de GitHub y creas el repositorio totalmente gratis.\n\n" +
-                    "• **Paso 2: Generar e Instalar el APK:** AI Studio realiza compilaciones automáticas de tu código para el simulador streaming. Puedes descargar el APK final para instalarlo en teléfonos reales directamente abriendo el menú de Ajustes del Proyecto en AI Studio > presiona 'Descargar APK'.\n\n" +
-                    "• **Paso 3: Crear un 'Release' en GitHub:** En tu página de GitHub, clica en 'Releases' > 'Create a new release'. Elige una versión (como v1.0.0), arrastra el archivo APK descargado al panel de adjuntos y publica. Tus familiares y amigos podrán descargar el APK directamente desde allí gratis.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                    lineHeight = 18.sp
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                FeatureRow(
+                    icon = Icons.Default.Share,
+                    title = "Sincronización en Tiempo Real",
+                    desc = "Colabora al instante. Edita y actualiza la lista de la compra de forma coordinada sincronizando con el ID de lista."
+                )
+                FeatureRow(
+                    icon = Icons.Default.ShoppingCart,
+                    title = "Modo Compra Adaptado",
+                    desc = "Optimizado para la tienda con fuentes legibles de gran escala, tachado intuitivo de artículos y progreso financiero dinámico."
+                )
+                FeatureRow(
+                    icon = Icons.Default.List,
+                    title = "Presupuesto Estimado",
+                    desc = "Define costos estimados en cada producto para mantener un control exhaustivo del presupuesto de tu carrito."
+                )
+                FeatureRow(
+                    icon = Icons.Default.Refresh,
+                    title = "Historial Permanente",
+                    desc = "Archiva tus compras finalizadas para contabilizar gastos acumulados y revisar detalles históricos con fecha."
+                )
+                FeatureRowPainter(
+                    painter = painterResource(id = com.example.R.drawable.ic_mic),
+                    title = "Dictado por Voz Inteligente",
+                    desc = "Añade artículos dictándolos de forma natural. El analizador extrae cantidades, unidades, precios y nombres."
                 )
             }
         }
 
+        // --- STACK TECNOLÓGICO ---
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            "Tecnologías Utilizadas",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                // First Row of Tech Badges
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TechBadge("Kotlin", androidx.compose.ui.graphics.Color(0xFF7F52FF), androidx.compose.ui.graphics.Color.White)
+                    TechBadge("Google AI Studio", androidx.compose.ui.graphics.Color(0xFF4F46E5), androidx.compose.ui.graphics.Color.White)
+                    TechBadge("Android & M3", androidx.compose.ui.graphics.Color(0xFF3DDC84), androidx.compose.ui.graphics.Color(0xFF1E1E1E))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                // Second Row of Tech Badges
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TechBadge("Supabase Cloud", androidx.compose.ui.graphics.Color(0xFF3ECF8E), androidx.compose.ui.graphics.Color.White)
+                    TechBadge("Room (SQLite)", androidx.compose.ui.graphics.Color(0xFF0284C7), androidx.compose.ui.graphics.Color.White)
+                    TechBadge("GitHub Core", androidx.compose.ui.graphics.Color(0xFF24292E), androidx.compose.ui.graphics.Color.White)
+                }
+            }
+        }
+
+        // --- FOOTER CREDITS ---
+        Spacer(modifier = Modifier.height(30.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                "AitorShop - v1.0.0",
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            Text(
+                "© 2026 Aitor Sánchez Gutiérrez",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+            )
+            Text(
+                "Todos los derechos reservados",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(40.dp))
+    }
+}
+
+@Composable
+fun TechBadge(name: String, backgroundColor: androidx.compose.ui.graphics.Color, contentColor: androidx.compose.ui.graphics.Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(backgroundColor)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = name,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = contentColor
+        )
+    }
+}
+
+@Composable
+fun FeatureRow(icon: ImageVector, title: String, desc: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), lineHeight = 16.sp)
+        }
+    }
+}
+
+@Composable
+fun FeatureRowPainter(painter: androidx.compose.ui.graphics.painter.Painter, title: String, desc: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painter,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), lineHeight = 16.sp)
+        }
     }
 }

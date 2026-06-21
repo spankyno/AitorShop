@@ -153,6 +153,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _userToken.value = null
         _isUserLoggedIn.value = false
         _isGuestMode.value = false
+        _lastSyncSuccessful.value = null
     }
 
     private fun saveSession(email: String, token: String) {
@@ -166,6 +167,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _userToken.value = token
         _isUserLoggedIn.value = true
         _isGuestMode.value = false
+        forceSync()
     }
 
     // Check if Supabase keys are configured in build variables
@@ -207,8 +209,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // Periodic background sync loop every 10 seconds to sync list changes continuously across devices
             while (true) {
                 kotlinx.coroutines.delay(10000)
-                if (isSupabaseConfigured) {
-                    repository.triggerSync(_activeListId.value)
+                if (isSupabaseConfigured && _isUserLoggedIn.value) {
+                    val success = repository.triggerSync(_activeListId.value)
+                    _lastSyncSuccessful.value = success
                 }
             }
         }
@@ -234,7 +237,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun forceSync() {
         if (!isSupabaseConfigured) {
-            _lastSyncSuccessful.value = false
+            _lastSyncSuccessful.value = null
+            return
+        }
+        if (!_isUserLoggedIn.value) {
+            _lastSyncSuccessful.value = null
             return
         }
         viewModelScope.launch {

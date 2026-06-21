@@ -108,7 +108,11 @@ fun ShoppingListScreen(
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.testTag("voice_fab")
                 ) {
-                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Dictar producto")
+                    Icon(
+                        painter = painterResource(id = com.example.R.drawable.ic_mic),
+                        contentDescription = "Dictar producto",
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 // Add Item Floating Action Button
@@ -704,7 +708,12 @@ fun ShoppingListScreen(
             onDismissRequest = { showVoiceDialogResult = null },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(
+                        painter = painterResource(id = com.example.R.drawable.ic_mic),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
                     Text("Confirmar Entrada por Voz")
                 }
             },
