@@ -87,7 +87,7 @@ alter publication supabase_realtime add table shopping_items;
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Image(
-                painter = painterResource(id = com.example.R.drawable.aitorshop_logo_1782022371963),
+                painter = painterResource(id = com.example.R.drawable.img_aitorshop_banner_1782133578299),
                 contentDescription = "AitorShop Ajustes Banner",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
