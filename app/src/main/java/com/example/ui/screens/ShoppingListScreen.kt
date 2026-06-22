@@ -209,7 +209,7 @@ fun ShoppingListScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text("Coste Total", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
@@ -229,7 +229,7 @@ fun ShoppingListScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text("En Carrito", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
@@ -238,43 +238,6 @@ fun ShoppingListScreen(
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                }
-            }
-
-            // --- PREDEFINED ITEMS HORIZONTAL SCROLL LIST ---
-            if (predefined.isNotEmpty()) {
-                Text(
-                    text = "Añadir rápido",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(predefined) { item ->
-                        SuggestionChip(
-                            onClick = {
-                                viewModel.addItem(
-                                    name = item.name,
-                                    quantity = 1.0,
-                                    unit = item.defaultUnit,
-                                    price = item.defaultPrice,
-                                    category = item.category
-                                )
-                                Toast.makeText(context, "${item.name} añadido", Toast.LENGTH_SHORT).show()
-                            },
-                            label = { Text(item.name) },
-                            icon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         )
                     }
                 }
