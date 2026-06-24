@@ -185,7 +185,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                val response = authApi.signInWithIdToken("id_token", com.example.data.remote.IdTokenAuthRequest("google", idToken), apiKey)
+                val response = authApi.signInWithIdToken("id_token", com.example.data.remote.IdTokenAuthRequest("google", idToken))
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     saveSession(body.user?.email ?: "usuario_google@gmail.com", body.accessToken ?: "", body.refreshToken ?: "")
