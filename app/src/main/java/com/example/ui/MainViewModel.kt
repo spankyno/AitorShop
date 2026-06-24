@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.local.*
 import com.example.data.remote.SupabaseClient
 import com.example.data.repository.ShoppingRepository
+import com.example.security.InputValidator
+import com.example.security.InputValidator.ValidationResult
 import com.example.security.SecureSessionManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -97,12 +99,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isGuestMode = MutableStateFlow(session.isGuestMode)
     val isGuestMode: StateFlow<Boolean> = _isGuestMode.asStateFlow()
 
+    // Errores de validación para mostrar en la UI
+    private val _validationError = MutableStateFlow<String?>(null)
+    val validationError: StateFlow<String?> = _validationError.asStateFlow()
+
+    fun clearValidationError() { _validationError.value = null }
+
     fun enableGuestMode() {
         session.setGuestMode(true)
         _isGuestMode.value = true
     }
 
     fun signUpWithSupabase(email: String, password: String, onDone: (Boolean, String) -> Unit) {
+        // ── Validación de entrada ──────────────────────────────────────────
+        val vEmail = InputValidator.validateEmail(email)
+        if (vEmail is ValidationResult.Err) { onDone(false, vEmail.message); return }
+        val vPass  = InputValidator.validatePassword(password)
+        if (vPass  is ValidationResult.Err) { onDone(false, vPass.message);  return }
+
         val authApi = SupabaseClient.getAuthApi()
         val apiKey = SupabaseClient.getApiKey()
         if (authApi == null || apiKey.isEmpty()) {
@@ -111,7 +125,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                val response = authApi.signUp(com.example.data.remote.AuthRequest(email, password), apiKey)
+                val response = authApi.signUp(com.example.data.remote.AuthRequest(
+                    (vEmail as ValidationResult.Ok).value,
+                    (vPass  as ValidationResult.Ok).value
+                ))
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     saveSession(body.user?.email ?: email, body.accessToken ?: "", body.refreshToken ?: "")
@@ -127,6 +144,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signInWithSupabase(email: String, password: String, onDone: (Boolean, String) -> Unit) {
+        // ── Validación de entrada ──────────────────────────────────────────
+        val vEmail = InputValidator.validateEmail(email)
+        if (vEmail is ValidationResult.Err) { onDone(false, vEmail.message); return }
+        val vPass  = InputValidator.validatePassword(password)
+        if (vPass  is ValidationResult.Err) { onDone(false, vPass.message);  return }
+
         val authApi = SupabaseClient.getAuthApi()
         val apiKey = SupabaseClient.getApiKey()
         if (authApi == null || apiKey.isEmpty()) {
@@ -135,7 +158,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                val response = authApi.signInWithPassword("password", com.example.data.remote.AuthRequest(email, password), apiKey)
+                val response = authApi.signInWithPassword("password", com.example.data.remote.AuthRequest(
+                    (vEmail as ValidationResult.Ok).value,
+                    (vPass  as ValidationResult.Ok).value
+                ))
                 if (response.isSuccessful && response.body() != null) {
                     val body = response.body()!!
                     saveSession(body.user?.email ?: email, body.accessToken ?: "", body.refreshToken ?: "")
@@ -270,12 +296,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Actions ---
     fun updateActiveListId(newListId: String) {
-        val sanitized = newListId.trim().uppercase(Locale.getDefault())
-        if (sanitized.isNotEmpty()) {
-            _activeListId.value = sanitized
-            session.activeListId = sanitized
-            viewModelScope.launch {
-                forceSync()
+        when (val v = InputValidator.validateListId(newListId)) {
+            is ValidationResult.Err -> { _validationError.value = v.message; return }
+            is ValidationResult.Ok  -> {
+                _activeListId.value = v.value
+                session.activeListId = v.value
+                viewModelScope.launch { forceSync() }
             }
         }
     }
@@ -304,16 +330,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addItem(name: String, quantity: Double, unit: String, price: Double, category: String) {
-        viewModelScope.launch {
-            repository.addItem(
-                name = name.trim(),
-                quantity = quantity,
-                unit = unit,
-                price = price,
-                category = category,
-                listId = _activeListId.value
-            )
-            forceSync()
+        when (val v = InputValidator.validateItem(name, quantity, unit, price, category)) {
+            is ValidationResult.Err -> { _validationError.value = v.message; return }
+            is ValidationResult.Ok  -> viewModelScope.launch {
+                repository.addItem(
+                    name     = v.value.name,
+                    quantity = v.value.quantity,
+                    unit     = v.value.unit,
+                    price    = v.value.price,
+                    category = v.value.category,
+                    listId   = _activeListId.value
+                )
+                forceSync()
+            }
         }
     }
 
@@ -325,17 +354,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateItemDetails(item: ShoppingItemEntity, newName: String, newQuantity: Double, newPrice: Double, newUnit: String, newCategory: String) {
-        viewModelScope.launch {
-            repository.updateItem(
-                item.copy(
-                    name = newName.trim(),
-                    quantity = newQuantity,
-                    price = newPrice,
-                    unit = newUnit,
-                    category = newCategory
+        when (val v = InputValidator.validateItem(newName, newQuantity, newUnit, newPrice, newCategory)) {
+            is ValidationResult.Err -> { _validationError.value = v.message; return }
+            is ValidationResult.Ok  -> viewModelScope.launch {
+                repository.updateItem(
+                    item.copy(
+                        name      = v.value.name,
+                        quantity  = v.value.quantity,
+                        price     = v.value.price,
+                        unit      = v.value.unit,
+                        category  = v.value.category,
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-            )
-            forceSync()
+                forceSync()
+            }
         }
     }
 
@@ -360,8 +393,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addCustomPredefined(name: String, category: String, price: Double, unit: String) {
+        val vName     = InputValidator.validateItemName(name)
+        if (vName     is ValidationResult.Err) { _validationError.value = vName.message;     return }
+        val vCategory = InputValidator.validateCategory(category)
+        if (vCategory is ValidationResult.Err) { _validationError.value = vCategory.message; return }
+        val vPrice    = InputValidator.validatePrice(price)
+        if (vPrice    is ValidationResult.Err) { _validationError.value = vPrice.message;    return }
+        val vUnit     = InputValidator.validateUnit(unit)
+        if (vUnit     is ValidationResult.Err) { _validationError.value = vUnit.message;     return }
+
         viewModelScope.launch {
-            repository.addPredefinedItem(name.trim(), category, price, unit)
+            repository.addPredefinedItem(
+                (vName     as ValidationResult.Ok).value,
+                (vCategory as ValidationResult.Ok).value,
+                (vPrice    as ValidationResult.Ok).value,
+                (vUnit     as ValidationResult.Ok).value
+            )
         }
     }
 
