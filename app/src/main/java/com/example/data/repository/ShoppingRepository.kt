@@ -407,7 +407,7 @@ class TokenAuthenticator(
         val authApi = SupabaseClient.getAuthApi() ?: return false
         return try {
             val response = authApi.refreshToken(
-                body = RefreshTokenRequest(refreshToken)
+                request = RefreshTokenRequest(refreshToken)
             )
             val body: AuthResponse? = response.body()
             if (response.isSuccessful
