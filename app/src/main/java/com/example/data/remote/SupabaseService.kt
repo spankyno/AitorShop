@@ -136,9 +136,14 @@ object SupabaseClient {
 
     private fun buildOkHttpClient(apiKey: String): OkHttpClient {
         return OkHttpClient.Builder()
-            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            // MEJORA — Timeouts reducidos a 8 s:
+            // · Con 15 s (original) o incluso 10 s, el usuario percibe la app
+            //   "congelada" sin feedback si el servidor tarda o no hay red.
+            // · 8 s es suficiente para operaciones REST sobre Supabase en
+            //   condiciones normales; si falla, WorkManager reintenta en background.
+            .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
             // API key inyectada de forma centralizada — NUNCA en los parámetros
             .addInterceptor(ApiKeyInterceptor(apiKey))
             // Logging seguro: solo BASIC en debug, sin volcar headers ni body
