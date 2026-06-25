@@ -1,6 +1,7 @@
 package com.example.data.remote
 
 import com.example.BuildConfig
+import com.example.security.SecureSessionManager
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -46,9 +47,31 @@ internal class ApiKeyInterceptor(private val apiKey: String) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
         val request = chain.request().newBuilder()
             .header("apikey", apiKey)
-            // Content-Type por defecto para peticiones con cuerpo JSON
             .header("Content-Type", "application/json")
             .build()
+        return chain.proceed(request)
+    }
+}
+
+/**
+ * Interceptor que inyecta el token JWT del usuario como Bearer en cada
+ * petición. Supabase lo necesita para aplicar las políticas RLS (Row Level
+ * Security): sin este header, las queries devuelven 0 filas aunque la
+ * apikey sea correcta.
+ *
+ * Si no hay sesión activa (usuario no logado) se omite el header y
+ * Supabase usará los permisos anónimos de la apikey.
+ */
+internal class AuthInterceptor(private val session: SecureSessionManager) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+        val token = session.accessToken
+        val request = if (!token.isNullOrBlank()) {
+            chain.request().newBuilder()
+                .header("Authorization", "Bearer $token")
+                .build()
+        } else {
+            chain.request()
+        }
         return chain.proceed(request)
     }
 }
@@ -125,9 +148,16 @@ interface SupabaseAuthApi {
 object SupabaseClient {
 
     private var customAuthenticator: okhttp3.Authenticator? = null
+    /** Sesión del usuario para inyectar el Bearer token en cada petición. */
+    private var session: SecureSessionManager? = null
 
     fun setAuthenticator(authenticator: okhttp3.Authenticator) {
         customAuthenticator = authenticator
+    }
+
+    /** Llamar una vez al inicializar el repositorio. */
+    fun setSession(s: SecureSessionManager) {
+        session = s
     }
 
     internal val moshi: Moshi = Moshi.Builder()
@@ -136,17 +166,14 @@ object SupabaseClient {
 
     private fun buildOkHttpClient(apiKey: String): OkHttpClient {
         return OkHttpClient.Builder()
-            // MEJORA — Timeouts reducidos a 8 s:
-            // · Con 15 s (original) o incluso 10 s, el usuario percibe la app
-            //   "congelada" sin feedback si el servidor tarda o no hay red.
-            // · 8 s es suficiente para operaciones REST sobre Supabase en
-            //   condiciones normales; si falla, WorkManager reintenta en background.
             .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-            // API key inyectada de forma centralizada — NUNCA en los parámetros
+            // 1. API key — requerida por Supabase en todas las peticiones
             .addInterceptor(ApiKeyInterceptor(apiKey))
-            // Logging seguro: solo BASIC en debug, sin volcar headers ni body
+            // 2. Bearer token — requerido por RLS para devolver las filas del usuario
+            .addInterceptor(AuthInterceptor(session!!))
+            // 3. Logging seguro: solo BASIC en debug
             .addInterceptor(buildSafeLoggingInterceptor())
             .authenticator { route, response ->
                 customAuthenticator?.authenticate(route, response)
@@ -167,6 +194,7 @@ object SupabaseClient {
     fun getApi(): SupabaseApi? {
         val apiKey = getApiKey().takeIf { it.isNotBlank() } ?: return null
         val formattedUrl = resolveBaseUrl() ?: return null
+        if (session == null) return null
         return try {
             Retrofit.Builder()
                 .baseUrl(formattedUrl)
@@ -182,6 +210,7 @@ object SupabaseClient {
     fun getAuthApi(): SupabaseAuthApi? {
         val apiKey = getApiKey().takeIf { it.isNotBlank() } ?: return null
         val formattedUrl = resolveBaseUrl() ?: return null
+        if (session == null) return null
         return try {
             Retrofit.Builder()
                 .baseUrl(formattedUrl)
