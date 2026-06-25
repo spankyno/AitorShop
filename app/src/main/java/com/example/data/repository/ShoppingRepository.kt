@@ -8,6 +8,7 @@ import androidx.core.app.NotificationCompat
 import com.example.BuildConfig
 import com.example.data.local.*
 import com.example.data.remote.AuthResponse
+import com.example.sync.SyncWorker
 import com.example.data.remote.RefreshTokenRequest
 import com.example.data.remote.SupabaseClient
 import com.example.data.remote.SupabaseShoppingItemDto
@@ -157,7 +158,11 @@ class ShoppingRepository(
     // ── Sincronización con Supabase ──────────────────────────────────────────
 
     suspend fun triggerSync(listId: String): Boolean = withContext(Dispatchers.IO) {
-        if (!isNetworkAvailable()) return@withContext false
+        if (!isNetworkAvailable()) {
+            // Sin red → encolar para reintento automático cuando vuelva la conexión
+            SyncWorker.enqueueOfflineSync(context, listId)
+            return@withContext false
+        }
         val api = SupabaseClient.getApi() ?: return@withContext false
 
         try {
@@ -257,11 +262,11 @@ class ShoppingRepository(
             true
         } catch (e: Exception) {
             e.printStackTrace()
+            // Petición fallida (timeout, servidor caído…) → encolar reintento
+            SyncWorker.enqueueOfflineSync(context, listId)
             false
         }
     }
-
-    // ── Notificaciones ───────────────────────────────────────────────────────
 
     private fun showStatusBarNotification(title: String, message: String) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
