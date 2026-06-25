@@ -167,10 +167,19 @@ class ShoppingRepository(
         val api = SupabaseClient.getApi() ?: return@withContext false
 
         try {
-            val remoteItems = api.getItems(
+            val itemsResponse = api.getItems(
                 listIdFilter = "eq.$listId",
                 deletedFilter = "eq.false"
             )
+
+            if (!itemsResponse.isSuccessful) {
+                val errorBody = itemsResponse.errorBody()?.string() ?: "HTTP ${itemsResponse.code()}"
+                android.util.Log.e("ShoppingRepository", "getItems failed: $errorBody")
+                SyncWorker.enqueueOfflineSync(context, listId)
+                return@withContext false
+            }
+
+            val remoteItems = itemsResponse.body() ?: emptyList()
 
             val localItems = shoppingItemDao.getAllRawItemsSync()
             val localAllMap = localItems.associateBy { it.id }
@@ -195,7 +204,8 @@ class ShoppingRepository(
                     //
                     // Si el local tiene isSynced=false Y su updatedAt >= remoto,
                     // el cambio local gana y se empujará al servidor en el paso 4.
-                    val remoteWins = local.isSynced || (remote.updatedAt > local.updatedAt)
+                    val remoteUpdatedAt = remote.updatedAt ?: remote.createdAt
+                    val remoteWins = local.isSynced || (remoteUpdatedAt > local.updatedAt)
 
                     if (remoteWins) {
                         val changed = local.isPurchased != remote.isPurchased
@@ -214,7 +224,7 @@ class ShoppingRepository(
                                     price       = remote.price,
                                     category    = remote.category,
                                     isPurchased = remote.isPurchased,
-                                    updatedAt   = remote.updatedAt,
+                                    updatedAt   = remote.updatedAt ?: remote.createdAt,
                                     isSynced    = true,
                                     isDeleted   = false
                                 )
@@ -306,7 +316,10 @@ class ShoppingRepository(
     private fun SupabaseShoppingItemDto.toEntity() = ShoppingItemEntity(
         id = id, name = name, quantity = quantity, unit = unit, price = price,
         category = category, isPurchased = isPurchased, listId = listId,
-        createdAt = createdAt, updatedAt = updatedAt, isSynced = true, isDeleted = false
+        createdAt = createdAt,
+        // Si updatedAt no existe aún en Supabase, usamos createdAt como fallback
+        updatedAt = updatedAt ?: createdAt,
+        isSynced = true, isDeleted = false
     )
 
     private fun ShoppingItemEntity.toDto() = SupabaseShoppingItemDto(
