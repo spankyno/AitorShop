@@ -12,6 +12,9 @@ import com.example.data.repository.ShoppingRepository
 import com.example.security.InputValidator
 import com.example.security.InputValidator.ValidationResult
 import com.example.security.SecureSessionManager
+import com.example.sync.SyncWorker
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -57,6 +60,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
+    /** Referencia al job del polling en primer plano para poder cancelarlo. */
+    private var pollingJob: Job? = null
 
     // Database & Repository initialization
     private val database = AppDatabase.getDatabase(application)
@@ -207,6 +212,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _isUserLoggedIn.value = false
         _isGuestMode.value = false
         _lastSyncSuccessful.value = null
+        // Cancelar WorkManager al cerrar sesión: no sincronizar sin usuario
+        pollingJob?.cancel()
+        SyncWorker.cancelPeriodicSync(getApplication())
+        SyncWorker.cancelOfflineQueue(getApplication())
     }
 
     private fun saveSession(email: String, token: String, refreshToken: String = "") {
@@ -215,6 +224,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _userToken.value = token
         _isUserLoggedIn.value = true
         _isGuestMode.value = false
+        // Arrancar polling periódico en background ahora que hay sesión activa
+        SyncWorker.schedulePeriodicSync(getApplication(), session.activeListId)
         forceSync()
     }
 
@@ -249,13 +260,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         session.registerListeners(encryptedPrefsListener, plainPrefsListener)
 
-        val connectivityManager = application.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        // ── NetworkCallback: sync inmediata al recuperar conexión ─────────────
+        val connectivityManager = application.getSystemService(
+            android.content.Context.CONNECTIVITY_SERVICE
+        ) as? android.net.ConnectivityManager
+
         if (connectivityManager != null) {
             val callback = object : android.net.ConnectivityManager.NetworkCallback() {
                 private var wasConnected = true
 
                 override fun onAvailable(network: android.net.Network) {
                     if (!wasConnected) {
+                        // Red recuperada → sync inmediata + WorkManager procesará cola
                         forceSync()
                     }
                     wasConnected = true
@@ -277,20 +293,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            // Seed defaults
             repository.seedPredefinedItemsIfNeeded()
-            // Initial Sync
             forceSync()
         }
-        viewModelScope.launch {
-            // Periodic background sync loop every 10 seconds to sync list changes continuously across devices
-            while (true) {
-                kotlinx.coroutines.delay(10000)
+
+        // ── Polling en PRIMER PLANO cada 30 s ────────────────────────────────
+        // Mientras el ViewModel está vivo (app en primer plano), sincronizamos
+        // cada 30 s para mantener la lista colaborativa actualizada sin WebSocket.
+        // El intervalo de 30 s es un equilibrio razonable entre frescura de datos
+        // y consumo de batería/datos. Para background usamos WorkManager (15 min).
+        pollingJob = viewModelScope.launch {
+            while (isActive) {
+                kotlinx.coroutines.delay(30_000L)
                 if (isSupabaseConfigured && _isUserLoggedIn.value) {
                     val success = repository.triggerSync(_activeListId.value)
                     _lastSyncSuccessful.value = success
                 }
             }
+        }
+
+        // ── Polling en BACKGROUND con WorkManager (15 min) ───────────────────
+        // Cuando la app está cerrada o en background, WorkManager garantiza
+        // que los cambios de otros usuarios se sincronizan periódicamente.
+        // También actúa como cola persistente: si hay ítems sin sincronizar
+        // (isSynced=false), WorkManager los reintentará con backoff exponencial
+        // en cuanto haya conexión disponible, sobreviviendo a reinicios del SO.
+        if (isSupabaseConfigured && session.isLoggedIn) {
+            SyncWorker.schedulePeriodicSync(application, session.activeListId)
         }
     }
 
@@ -548,11 +577,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        pollingJob?.cancel()
         session.unregisterListeners(encryptedPrefsListener, plainPrefsListener)
-        val connectivityManager = getApplication<Application>().getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-        networkCallback?.let {
-            connectivityManager?.unregisterNetworkCallback(it)
-        }
+        val connectivityManager = getApplication<Application>().getSystemService(
+            android.content.Context.CONNECTIVITY_SERVICE
+        ) as? android.net.ConnectivityManager
+        networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
     }
 }
 
