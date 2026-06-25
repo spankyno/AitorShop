@@ -25,9 +25,12 @@ data class SupabaseShoppingItemDto(
     @Json(name = "isPurchased") val isPurchased: Boolean,
     @Json(name = "listId") val listId: String,
     @Json(name = "createdAt") val createdAt: Long,
-    /** Timestamp de última modificación (epoch ms). Usado como vector de
-     *  versión LWW: el registro con mayor updatedAt gana en conflicto. */
-    @Json(name = "updatedAt") val updatedAt: Long,
+    /**
+     * Nullable porque la columna `updatedAt` puede no existir aún en la tabla
+     * de Supabase si el proyecto no ha aplicado la migración.
+     * Si es null, se usa `createdAt` como fallback para la lógica LWW.
+     */
+    @Json(name = "updatedAt") val updatedAt: Long?,
     @Json(name = "isDeleted") val isDeleted: Boolean
 )
 
@@ -100,7 +103,7 @@ interface SupabaseApi {
     suspend fun getItems(
         @Query("listId") listIdFilter: String,
         @Query("isDeleted") deletedFilter: String = "eq.false"
-    ): List<SupabaseShoppingItemDto>
+    ): Response<List<SupabaseShoppingItemDto>>
 
     @POST("rest/v1/shopping_items")
     @Headers("Prefer: resolution=merge-duplicates")
