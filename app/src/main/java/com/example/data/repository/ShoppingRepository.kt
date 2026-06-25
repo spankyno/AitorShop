@@ -35,6 +35,7 @@ class ShoppingRepository(
 
     init {
         createNotificationChannel()
+        SupabaseClient.setSession(session)
         SupabaseClient.setAuthenticator(TokenAuthenticator(session))
     }
 
